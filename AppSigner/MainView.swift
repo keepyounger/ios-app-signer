@@ -29,6 +29,7 @@ class MainView: NSView, URLSessionDataDelegate, URLSessionDelegate, URLSessionDo
     
     //MARK: Variables
     var provisioningProfiles:[ProvisioningProfile] = []
+    var oriProvisioningProfiles:[ProvisioningProfile] = []
     @objc var codesigningCerts: [String] = []
     @objc var profileFilename: String?
     @objc var ReEnableNewApplicationID = false
@@ -155,6 +156,7 @@ class MainView: NSView, URLSessionDataDelegate, URLSessionDelegate, URLSessionDo
                 if codesigningCerts.contains(defaultCert) {
                     Log.write("Loaded Codesigning Certificate from Defaults: \(defaultCert)")
                     CodesigningCertsPopup.selectItem(withTitle: defaultCert)
+                    filterProfiles(with: defaultCert)
                 }
             }
             setStatus("Ready")
@@ -234,7 +236,7 @@ class MainView: NSView, URLSessionDataDelegate, URLSessionDelegate, URLSessionDo
             if profile.expires.timeIntervalSince1970 > Date().timeIntervalSince1970 {
                 newProfiles.append(profile)
                 
-                ProvisioningProfilesPopup.addItem(withTitle: "\(profile.name)\(zeroWidthPadding) (\(profile.teamID))")
+                ProvisioningProfilesPopup.addItem(withTitle: "\(profile.name)\(zeroWidthPadding) (\(profile.teamID))\(profile.devCerId)")
                 
                 let toolTipItems = [
                     "\(profile.name)",
@@ -249,6 +251,7 @@ class MainView: NSView, URLSessionDataDelegate, URLSessionDelegate, URLSessionDo
                 setStatus("Skipped profile \(profile.appID), expired (\(formatter.string(from: profile.expires as Date)))")
             }
         }
+        self.oriProvisioningProfiles = newProfiles
         self.provisioningProfiles = newProfiles
         chooseProvisioningProfile(ProvisioningProfilesPopup)
     }
@@ -1134,6 +1137,38 @@ class MainView: NSView, URLSessionDataDelegate, URLSessionDelegate, URLSessionDo
     @IBAction func chooseSigningCertificate(_ sender: NSPopUpButton) {
         Log.write("Set Codesigning Certificate Default to: \(sender.stringValue)")
         defaults.setValue(sender.selectedItem?.title, forKey: "signingCertificate")
+        filterProfiles(with: sender.selectedItem!.title)
+    }
+    
+    func filterProfiles(with cerName: String) {
+        let teamid = (cerName as NSString).substring(with: NSMakeRange(cerName.count-11, 10))
+        ProvisioningProfilesPopup.removeAllItems()
+        ProvisioningProfilesPopup.addItems(withTitles: [
+            "Re-Sign Only",
+            "Choose Custom File",
+            "––––––––––––––––––––––"
+        ])
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .medium
+        var newProfiles: [ProvisioningProfile] = []
+        for profile in oriProvisioningProfiles {
+            let title = "\(profile.name) (\(profile.teamID))\(profile.devCerId)"
+            if title.contains(teamid) {
+                newProfiles.append(profile)
+                ProvisioningProfilesPopup.addItem(withTitle: title)
+                let toolTipItems = [
+                    "\(profile.name)",
+                    "",
+                    "Team ID: \(profile.teamID)",
+                    "Created: \(formatter.string(from: profile.created as Date))",
+                    "Expires: \(formatter.string(from: profile.expires as Date))"
+                ]
+                ProvisioningProfilesPopup.lastItem!.toolTip = toolTipItems.joined(separator: "\n")
+            }
+            
+        }
+        self.provisioningProfiles = newProfiles
     }
     
     @IBAction func doSign(_ sender: NSButton) {

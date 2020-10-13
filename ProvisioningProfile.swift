@@ -16,6 +16,7 @@ struct ProvisioningProfile {
         appID: String,
         teamID: String,
         rawXML: String,
+        devCerId: String = "",
         entitlements: AnyObject?
     fileprivate let delegate = NSApplication.shared.delegate as! AppDelegate
     
@@ -46,9 +47,10 @@ struct ProvisioningProfile {
         var newProfiles = [ProvisioningProfile]()
         var names = [String]()
         for profile in output {
-            if !names.contains("\(profile.name)\(profile.appID)") {
+            let name = "\(profile.name)\(profile.appID)\(profile.teamID)"
+            if !names.contains(name) {
                 newProfiles.append(profile)
-                names.append("\(profile.name)\(profile.appID)")
+                names.append(name)
                 NSLog("\(profile.name), \(profile.created)")
             }
         }
@@ -85,10 +87,20 @@ struct ProvisioningProfile {
             
             
             if let results = try? PropertyListSerialization.propertyList(from: self.rawXML.data(using: String.Encoding.utf8)!, options: PropertyListSerialization.MutabilityOptions(), format: nil) {
-                if let expirationDate = (results as AnyObject).value(forKey: "ExpirationDate") as? Date,
-                    let creationDate = (results as AnyObject).value(forKey: "CreationDate") as? Date,
-                    let name = (results as AnyObject).value(forKey: "Name") as? String,
-                    let entitlements = (results as AnyObject).value(forKey: "Entitlements"),
+                
+                let object = results as AnyObject
+                let cer = (object.value(forKey: "DeveloperCertificates") as! [Data]).first
+                let cerStr = String.init(data: cer!, encoding: .ascii)!
+                var devCerId = ""
+                if let range = cerStr.range(of: "\\([A-Z0-9]{10}\\)", options: .regularExpression) {
+                    devCerId = cerStr.substring(with: range)
+                }
+                self.devCerId = devCerId
+                
+                if let expirationDate = object.value(forKey: "ExpirationDate") as? Date,
+                    let creationDate = object.value(forKey: "CreationDate") as? Date,
+                    let name = object.value(forKey: "Name") as? String,
+                    let entitlements = object.value(forKey: "Entitlements"),
                     let applicationIdentifier = (entitlements as AnyObject).value(forKey: "application-identifier") as? String,
                     let periodIndex = applicationIdentifier.firstIndex(of: ".") {
                         self.filename = filename
